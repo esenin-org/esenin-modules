@@ -83,14 +83,14 @@ def topics():
     model_path = os.path.join(batch_id, "model")
 
     if not os.path.exists(model_path):
-        return jsonify({"error": "Unknown id: {}".format(batch_id)}), 500
+        return jsonify({"error": u"Unknown id: {}".format(batch_id)}), 500
 
     model_artm = artm.ARTM(num_topics=0)
     model_artm.load(model_path)
 
     phi = model_artm.get_phi()
     if not term in phi.index:
-        return jsonify({"error": "Unknown term: {}".format(term)}), 500
+        return jsonify({"error": u"Unknown term: {}".format(term)}), 500
 
     phi_term = phi.loc[term].astype(float)
     phi_term /= phi_term.sum()

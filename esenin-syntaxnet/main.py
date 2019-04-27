@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from flask import Flask, request, jsonify
 from werkzeug.exceptions import HTTPException
 import logging
@@ -51,7 +53,7 @@ def load_model(base_dir, master_spec_name, checkpoint_name):
 segmenter_model = load_model("/models/Russian-SynTagRus/segmenter", "spec.textproto", "checkpoint")
 parser_model = load_model("/models/Russian-SynTagRus", "parser_spec.textproto", "checkpoint")
 
-def annotate_text(text):
+def syntaxnet_tokenize(text):
     sentence = sentence_pb2.Sentence(
         text=text,
         token=[sentence_pb2.Token(word=text, start=-1, end=-1)]
@@ -62,13 +64,38 @@ def annotate_text(text):
         char_input = gen_parser_ops.char_token_generator([sentence.SerializeToString()])
         preprocessed = tmp_session.run(char_input)[0]
     segmented, _ = segmenter_model(preprocessed)
+    tokens = []
 
-    annotations, traces = parser_model(segmented[0])
+    for t in sentence_pb2.Sentence.FromString(segmented[0]).token:
+        tokens.append(t.word)
+
+    return tokens
+
+def syntaxnet_sentence(tokens):
+    pb_tokens = []
+    last_start = 0
+    for token in tokens:
+        token_bytes = token.encode("utf8")
+        pb_tokens.append(sentence_pb2.Token(
+            word=token_bytes, start=last_start, end=last_start + len(token_bytes) - 1)
+        )
+        last_start = last_start + len(token_bytes) + 1
+
+    annotations, traces = parser_model(sentence_pb2.Sentence(
+        text=u" ".join(tokens).encode("utf8"),
+        token=pb_tokens
+    ).SerializeToString())
     assert len(annotations) == 1
     assert len(traces) == 1
     return sentence_pb2.Sentence.FromString(annotations[0])
 
-def parse_string_from_dragnn(sentence):
+def esenin_dtree(sentence):
+    nodes = []
+    for t in sentence.token:    
+        nodes.append({"label": t.label, "parent": t.head})
+    return jsonify({"nodes": nodes})
+
+def esenin_pos(sentence):
     def parse_tag(tag):
         result_dict = {}
 
@@ -96,22 +123,12 @@ def parse_string_from_dragnn(sentence):
         
         return result_dict
 
-    result = annotate_text(sentence)
-
-    result_dict = {}
-    words = []
-    for t in result.token:
-        word_dict = {}
-        word_dict['word'] = t.word
-        word_dict['connection_label'] = t.label
-        word_dict['connection_index'] = t.head
-
+    pos = []
+    for t in sentence.token:        
         tag_dict = parse_tag(t.tag)
-        word_dict['pos'] = tag_dict['fPOS']
-        
-        words.append(word_dict)
-    result_dict['words'] = words
-    return jsonify(result_dict)
+        pos.append(tag_dict['fPOS'])
+    
+    return jsonify({"pos": pos})
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -127,8 +144,18 @@ def handle_error(e):
 
 @app.route('/api/pos', methods=['POST'])
 def pos():
+    tokens = request.json['tokens']
+    return esenin_pos(syntaxnet_sentence(tokens))
+
+@app.route('/api/dtree', methods=['POST'])
+def dtree():
+    tokens = request.json['tokens']
+    return esenin_dtree(syntaxnet_sentence(tokens))
+
+@app.route('/api/tokenize', methods=['POST'])
+def tokenize():
     text = request.json['text']
-    return parse_string_from_dragnn(text)
+    return jsonify({"tokens": syntaxnet_tokenize(text)})
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=9000)
