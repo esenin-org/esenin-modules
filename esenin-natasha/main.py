@@ -35,8 +35,8 @@ def natasha_named_entities(tokens):
     for match in matches:
         app.logger.info(str(match))
         (start, finish) = match.span
-        token_start = bisect.bisect_right(token_starts, start)
-        token_finish = bisect.bisect_left(token_starts, finish)
+        token_start = bisect.bisect_right(token_starts, start) - 1
+        token_finish = bisect.bisect_left(token_starts, finish) - 1
         entities.append({"indexes": list(range(token_start, token_finish + 1)), "kind": "name"})
 
     return entities

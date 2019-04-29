@@ -28,10 +28,22 @@ def razdel_tokenize(text):
 
     return tokens
 
+def razdel_sentenize(text):
+    sentences = []
+    for t in razdel.sentenize(text):
+        sentences.append(t.text)
+
+    return sentences
+
 @app.route('/api/token', methods=['POST'])
 def tokenize():
     text = request.json['text']
     return jsonify({"tokens": razdel_tokenize(text)})
+
+@app.route('/api/sentence', methods=['POST'])
+def sentenize():
+    text = request.json['text']
+    return jsonify({"sentences": razdel_sentenize(text)})
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=9000)
